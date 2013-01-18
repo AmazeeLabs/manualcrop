@@ -171,7 +171,9 @@ function manualcrop_widget_process($element, &$form_state, $form) {
  *   Widget settings.
  */
 function manualcrop_croptool_prepare_form(&$form, &$form_state, $js_identifier, $settings = array()) {
-  if (isset($_COOKIE['has_js']) && $_COOKIE['has_js']) {
+  // Hack: remove this condition because on the current live system all the
+  // cookies are stripped out by Varnish.
+  //if (isset($_COOKIE['has_js']) && $_COOKIE['has_js']) {
     $styles = &drupal_static(__FUNCTION__);
 
     if (!is_array($styles)) {
@@ -216,7 +218,7 @@ function manualcrop_croptool_prepare_form(&$form, &$form_state, $js_identifier, 
     else {
       $form_state['manualcrop_data']['images'] = array();
     }
-  }
+  //}
 }
 
 /**

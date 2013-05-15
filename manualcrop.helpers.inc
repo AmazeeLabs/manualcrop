@@ -27,6 +27,7 @@ function manualcrop_supported_widgets($widget_type = NULL, $settings = array()) 
   // List all widgets and the optional settings they support.
   $widgets = array(
     'image_image' => $optional_settings,
+    'image_miw' => $optional_settings,
     'media_generic' => array('thumblist'),
   );
 
@@ -83,8 +84,10 @@ function manualcrop_default_widget_settings() {
     'manualcrop_instant_crop' => FALSE,
     // Show a default crop area when opening an uncropped image?
     'manualcrop_default_crop_area' => TRUE,
+    // Maximize the default crop area?
+    'manualcrop_maximize_default_crop_area' => FALSE,
     // Exclude or include the selected styles?
-    'manualcrop_styles_mode' => 'exclude',
+    'manualcrop_styles_mode' => 'include',
     // List of selected styles.
     'manualcrop_styles_list' => array(),
     // List of required crop selections.
@@ -138,6 +141,11 @@ function manualcrop_js_identifier($data) {
  *   If the style machine name was empty an object with all the styles is returned.
  */
 function manualcrop_load_crop_selection($file, $style_name = NULL) {
+  // Remove any query string (e.g., the security token used by the Image module)
+  // to get the correct file uri as stored in the {file_managed} table.
+  $parts = explode('?', $file);
+  $file = reset($parts);
+
   if (empty($style_name)) {
     $result = db_query('SELECT c.style_name, c.x, c.y, c.width, c.height FROM {manualcrop} c INNER JOIN {file_managed} f ON c.fid = f.fid WHERE f.uri = :uri', array(
       ':uri' => $file,
@@ -196,22 +204,22 @@ function manualcrop_styles_with_crop($include_reuse = FALSE) {
  *
  * @param $settings
  *   Widget settings array.
+ *
+ * @return
+ *   List of required image styles.
  */
 function manualcrop_instance_required_styles($settings) {
-  // Array of required styles.
-  $required = array_values($settings['manualcrop_require_cropping']);
-
   // Make sure to exclude unavailable styles.
-  if (!empty($required) && !empty($settings['manualcrop_styles_list'])) {
+  if (!empty($settings['manualcrop_require_cropping']) && !empty($settings['manualcrop_styles_list'])) {
     if ($settings['manualcrop_styles_mode'] == 'include') {
-      $required = array_intersect($required, array_values($settings['manualcrop_styles_list']));
+      return array_intersect($settings['manualcrop_require_cropping'], $settings['manualcrop_styles_list']);
     }
     else {
-      $required = array_diff($required, array_values($settings['manualcrop_styles_list']));
+      return array_diff($settings['manualcrop_require_cropping'], $settings['manualcrop_styles_list']);
     }
   }
 
-  return $required;
+  return array();
 }
 
 /**
@@ -246,14 +254,11 @@ function _manualcrop_field_widget_update_names_in_settings($style_name, $new_sty
             // Process all settings.
             foreach ($list as $key => &$item) {
               if (isset($item[$style_name])) {
-                unset($item[$style_name]);
-
                 if (!is_null($new_style_name)) {
                   $item[$new_style_name] = $new_style_name;
                 }
-                elseif (empty($require)) {
-                  unset($settings[$key]);
-                }
+
+                unset($item[$style_name]);
               }
               else {
                 // Not processed, so remove it from the list.
@@ -286,7 +291,7 @@ function _manualcrop_reuse_effect_update_names_in_settings($style_name, $new_sty
       // Check if the first effect is a Manual Crop effect.
       $effect = reset($style['effects']);
 
-      // Check if this is a Manual Crop reuse effect that needs an update.
+      // Check if this is a Manual Crop reuse effect that needs to be updated.
       if (_manualcrop_is_own_effect($effect, FALSE) && $effect['data']['reusestyle'] == $style_name) {
         if (is_null($new_style_name)) {
           image_effect_delete($effect);
@@ -335,12 +340,48 @@ function _manualcrop_image_style_name($style_name) {
  * @param $effect
  *   Image style effect information array.
  * @param $crop_effect
- *   Set to TRUE to require a cropping effect or set to FALSE to require the
- *   reuse effect.
+ *   Set to TRUE to require a cropping effect; set to FALSE to require
+ *   a reuse effect. Defaults to NULL, which ignores effect type.
  *
  * @return
  *   TRUE if this is a Manual Crop (cropping/reuse) effect, FALSE otherwise.
  */
 function _manualcrop_is_own_effect($effect, $crop_effect = NULL) {
-  return ($effect['module'] == 'manualcrop' && (is_null($crop_effect) || ($crop_effect ^ ($effect['name'] == 'manualcrop_reuse'))));
+  if ($effect['module'] == 'manualcrop') {
+    if (is_null($crop_effect)) {
+      return TRUE;
+    };
+
+    return $crop_effect ^ in_array($effect['name'], array('manualcrop_reuse', 'manualcrop_auto_reuse'));
+  }
+  return FALSE;
+}
+
+/**
+ * Helper function to determine if the form for a Field Collection field has
+ * already been prepared. This function checks if the field instance is
+ * attached to a Field Collection item entity, if so we'll store it and return
+ * FALSE the next time.
+ *
+ * @param $instance
+ *   Field instance array.
+ *
+ * @return
+ *   TRUE if this field isn't attached to a Field Collection entity or if it was
+ *   checked for the first time, FALSE otherwise.
+ */
+function _manualcrop_check_field_collection_form_prepare($instance) {
+  $processed = &drupal_static(__FUNCTION__, array());
+
+  if (module_exists('field_collection')) {
+    if (!empty($instance['entity_type']) && $instance['entity_type'] == 'field_collection_item') {
+      if (isset($processed[$instance['field_name']])) {
+        return FALSE;
+      }
+
+      $processed[$instance['field_name']] = TRUE;
+    }
+  }
+
+  return TRUE;
 }

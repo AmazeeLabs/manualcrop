@@ -112,15 +112,14 @@ ManualCrop.showCroptool = function(identifier, style, fid) {
 
       // Get the image and its dimensions.
       var image = $('.manualcrop-image', origContainer);
-      var width = ManualCrop.parseInt(image.width()) || ManualCrop.parseInt(image.attr('width'));
-      var height = ManualCrop.parseInt(image.height()) || ManualCrop.parseInt(image.attr('height'));
+      var dimensions = ManualCrop.getImageDimensions(image);
 
       // Scale the image to fit the maximum width and height (so all is visible).
       var maxWidth = conWidth - ManualCrop.parseInt(image.css('marginLeft')) - ManualCrop.parseInt(image.css('marginRight'));
       var maxHeight = conHeight - ManualCrop.parseInt(image.css('marginTop')) - ManualCrop.parseInt(image.css('marginBottom'));
 
       // Calculate the clone image dimensions.
-      var resized = ManualCrop.resizeDimensions(width, height, maxWidth, maxHeight);
+      var resized = ManualCrop.resizeDimensions(dimensions.width, dimensions.height, maxWidth, maxHeight);
 
       // Set the new width and height to the cloned image.
       image = $('.manualcrop-image', ManualCrop.croptool)
@@ -136,8 +135,8 @@ ManualCrop.showCroptool = function(identifier, style, fid) {
         movable: true,
         resizable: true,
         parent: image.parent(),
-        imageWidth: width,
-        imageHeight: height,
+        imageWidth: dimensions.width,
+        imageHeight: dimensions.height,
         onSelectChange: ManualCrop.updateSelection
       };
 
@@ -172,7 +171,7 @@ ManualCrop.showCroptool = function(identifier, style, fid) {
       }
 
       // Set the image style name.
-      $('.manualcrop-image-style', ManualCrop.croptool).text(styleName);
+      $('.manualcrop-style-name', ManualCrop.croptool).text(styleName);
 
       if (typeof styleSelect != 'undefined') {
         // Reset the image style selection list.
@@ -184,12 +183,23 @@ ManualCrop.showCroptool = function(identifier, style, fid) {
         $('.manualcrop-style-button-' + fid).hide();
       }
 
-      // Append the cropping area (last, to prevent that '_11' is undefined).
+      // Append the cropping area (last, to prevent that "_11" is undefined).
       if (cropType == 'overlay') {
         $('body').append(ManualCrop.croptool);
       }
       else {
         origContainer.parent().append(ManualCrop.croptool);
+      }
+
+      // Put our overlay on top.
+      if (cropType == 'overlay') {
+        var overlayContainer = $('#overlay-container', top.document);
+        if (overlayContainer.length) {
+          overlayContainer
+            .addClass('manualcrop-tweaked')
+            .data('old-z-index', overlayContainer.css('z-index'))
+            .css('z-index', '1000');
+        }
       }
 
       // Create the crop widget.
@@ -199,6 +209,14 @@ ManualCrop.showCroptool = function(identifier, style, fid) {
       // so we set the options again to initialize it correctly.
       if ($.browser.msie) {
         ManualCrop.widget.setOptions(options);
+      }
+
+      // Move the selection info into the widget.
+      var selectionInfo = $('.manualcrop-selection-info', ManualCrop.croptool);
+      if (selectionInfo.length) {
+        $('.imgareaselect-selection', ManualCrop.croptool)
+          .after(selectionInfo)
+          .parent().css('overflow', 'visible');
       }
 
       // Insert the instant preview image.
@@ -211,7 +229,7 @@ ManualCrop.showCroptool = function(identifier, style, fid) {
           .height(instantPreview.width());
 
         // Calculate the instant preview dimensions.
-        resized = ManualCrop.resizeDimensions(width, height, instantPreview.width(), instantPreview.width());
+        resized = ManualCrop.resizeDimensions(dimensions.width, dimensions.height, instantPreview.width(), instantPreview.width());
 
         // Set those dimensions.
         image.clone().appendTo(instantPreview)
@@ -225,48 +243,57 @@ ManualCrop.showCroptool = function(identifier, style, fid) {
 
         // Create a default crop area.
         if (typeof fields[identifier] == 'object' && fields[identifier].defaultCropArea) {
-          var minWidth = (typeof options.minWidth != 'undefined' ? options.minWidth : 0);
-          var minHeight = (typeof options.minHeight != 'undefined' ? options.minHeight : 0)
-
-          // Set a width and height.
-          ManualCrop.oldSelection = {
-            width: (minWidth ? minWidth * 100 : (width / 2)),
-            height: (minHeight ? minHeight * 100 : (height / 2)),
-            maxWidth: (width / 2),
-            maxHeight: (height / 2)
-          };
-
-          // Resize the selection.
-          ManualCrop.oldSelection = ManualCrop.resizeDimensions(ManualCrop.oldSelection);
-
-          // Make sure we respect the minimum dimensions.
-          if (minWidth || minHeight) {
-            if (minWidth && ManualCrop.oldSelection.width < minWidth) {
-              ManualCrop.oldSelection.width = minWidth;
-
-              if (minHeight) {
-                ManualCrop.oldSelection.height = minHeight;
-              }
-            }
-            else if (minHeight && ManualCrop.oldSelection.height < minHeight) {
-              ManualCrop.oldSelection.height = minHeight;
-
-              if (minWidth) {
-                ManualCrop.oldSelection.width = minWidth;
-              }
-            }
+          if (fields[identifier].maximizeDefaultCropArea) {
+            ManualCrop.croptool.imagesLoaded(ManualCrop.maximizeSelection);
           }
+          else {
+            var minWidth = (typeof options.minWidth != 'undefined' ? options.minWidth : 0);
+            var minHeight = (typeof options.minHeight != 'undefined' ? options.minHeight : 0)
 
-          // Center the selection.
-          ManualCrop.oldSelection.x1 = (width - ManualCrop.oldSelection.width) / 2;
-          ManualCrop.oldSelection.y1 = (height - ManualCrop.oldSelection.height) / 2;
-          ManualCrop.oldSelection.x2 = ManualCrop.oldSelection.x1 + ManualCrop.oldSelection.width;
-          ManualCrop.oldSelection.y2 = ManualCrop.oldSelection.y1 + ManualCrop.oldSelection.height;
+            // Set a width and height.
+            var selection = {
+              width: (minWidth ? minWidth * 100 : (width / 2)),
+              height: (minHeight ? minHeight * 100 : (height / 2)),
+              maxWidth: (dimensions.width / 2),
+              maxHeight: (dimensions.height / 2)
+            };
+
+            // Resize the selection.
+            selection = ManualCrop.resizeDimensions(selection);
+
+            // Make sure we respect the minimum dimensions.
+            if (minWidth || minHeight) {
+              if (minWidth && selection.width < minWidth) {
+                selection.width = minWidth;
+
+                if (minHeight) {
+                  selection.height = minHeight;
+                }
+              }
+              else if (minHeight && selection.height < minHeight) {
+                selection.height = minHeight;
+
+                if (minWidth) {
+                  selection.width = minWidth;
+                }
+              }
+            }
+
+            // Center the selection.
+            selection.x1 = Math.round((dimensions.width - selection.width) / 2);
+            selection.y1 = Math.round((dimensions.height - selection.height) / 2);
+            selection.x2 = selection.x1 + selection.width;
+            selection.y2 = selection.y1 + selection.height;
+
+            // Set the selection.
+            ManualCrop.croptool.imagesLoaded(function() {
+              ManualCrop.setSelection(selection);
+            });
+          }
         }
       }
-
-      // Set the initial selection.
-      if (ManualCrop.oldSelection) {
+      else {
+        // Set the initial selection.
         ManualCrop.croptool.imagesLoaded(ManualCrop.resetSelection);
       }
 
@@ -297,6 +324,16 @@ ManualCrop.closeCroptool = function(reset) {
     ManualCrop.widget = null;
     ManualCrop.output = null;
 
+    // Restore the overlay z-index.
+    var overlayContainer = $('#overlay-container.manualcrop-tweaked', top.document);
+    if (overlayContainer.length) {
+      overlayContainer
+        .removeClass('manualcrop-tweaked')
+        .css('z-index', overlayContainer.data('old-z-index'));
+
+      $.removeData(overlayContainer, 'old-z-index');
+    }
+
     $('.manualcrop-style-button').show();
 
     $(document).unbind('keyup', ManualCrop.handleKeyboard);
@@ -309,10 +346,7 @@ ManualCrop.closeCroptool = function(reset) {
 ManualCrop.resetSelection = function() {
   if (ManualCrop.croptool) {
     if (ManualCrop.oldSelection) {
-      ManualCrop.widget.setSelection(ManualCrop.oldSelection.x1, ManualCrop.oldSelection.y1, ManualCrop.oldSelection.x2, ManualCrop.oldSelection.y2);
-      ManualCrop.widget.setOptions({hide: false, show: true});
-      ManualCrop.widget.update();
-      ManualCrop.updateSelection(null, ManualCrop.oldSelection);
+      ManualCrop.setSelection(ManualCrop.oldSelection);
 
       // Hide reset button.
       $('.manualcrop-reset', ManualCrop.croptool).hide();
@@ -331,8 +365,7 @@ ManualCrop.maximizeSelection = function() {
     var image = $('img.manualcrop-image', ManualCrop.croptool);
 
     // Get the original width and height.
-    var origWidth = ManualCrop.parseInt(image.get(0).getAttribute('width'));
-    var origHeight = ManualCrop.parseInt(image.get(0).getAttribute('height'))
+    var dimensions = ManualCrop.getImageDimensions(image);
     var options = ManualCrop.widget.getOptions();
 
     // Check if the ratio should be respected.
@@ -343,34 +376,61 @@ ManualCrop.maximizeSelection = function() {
       var ratioHeight = ManualCrop.parseInt(ratio[2]);
 
       // Crop area defaults.
-      var width = origWidth;
-      var height = origHeight;
+      var width = dimensions.width;
+      var height = dimensions.height;
       var x = 0;
       var y = 0;
 
-      if ((ratioWidth / ratioHeight) > (origWidth / origHeight)) {
+      if ((ratioWidth / ratioHeight) > (dimensions.width / dimensions.height)) {
         // Crop from top and bottom.
         height = Math.floor((width / ratioWidth) * ratioHeight);
-        y = Math.floor((origHeight - height) / 2);
+        y = Math.floor((dimensions.height - height) / 2);
       }
       else {
         // Crop from sides.
-        width = Math.floor((origHeight / ratioHeight) * ratioWidth);
-        x = Math.floor((origWidth - width) / 2);
+        width = Math.floor((dimensions.height / ratioHeight) * ratioWidth);
+        x = Math.floor((dimensions.width - width) / 2);
       }
 
       // Set the new selection.
-      ManualCrop.widget.setSelection(x, y, (x + width), (y + height));
+      ManualCrop.setSelection(x, y, (x + width), (y + height));
     }
     else {
       // No ratio requirements, just select the whole image.
-      ManualCrop.widget.setSelection(0, 0, origWidth, origHeight);
+      ManualCrop.setSelection(0, 0, dimensions.width, dimensions.height);
     }
+  }
+}
 
-    // Update the widget and stored selection.
+/**
+ * Set a selection.
+ *
+ * @param x1
+ *   Left top X coordinate or a selection object with all parameters.
+ * @param y1
+ *   Left top Y coordinate.
+ * @param x2
+ *   Right bottom X coordinate.
+ * @param y2
+ *   Right bottom Y coordinate.
+ */
+ManualCrop.setSelection = function(x1, y1, x2, y2) {
+  if (typeof x1 == 'object') {
+    var selection = x1;
+  }
+  else {
+    var selection = {};
+    selection.x1 = x1;
+    selection.y1 = y1;
+    selection.x2 = x2;
+    selection.y2 = y2;
+  }
+
+  if (ManualCrop.croptool) {
+    ManualCrop.widget.setSelection(selection.x1, selection.y1, selection.x2, selection.y2);
     ManualCrop.widget.setOptions({hide: false, show: true});
     ManualCrop.widget.update();
-    ManualCrop.updateSelection(null, ManualCrop.widget.getSelection());
+    ManualCrop.updateSelection(null, selection);
   }
 }
 
@@ -404,8 +464,10 @@ ManualCrop.updateSelection = function(image, selection) {
     image = $('img.manualcrop-image', ManualCrop.croptool);
 
     // Get the original width and height.
-    var origWidth = ManualCrop.parseInt(image.get(0).getAttribute('width'));
-    var origHeight = ManualCrop.parseInt(image.get(0).getAttribute('height'))
+    var dimensions = ManualCrop.getImageDimensions(image);
+
+    // Get the selection info wrapper.
+    var selectionInfo = $('.manualcrop-selection-info', ManualCrop.croptool);
 
     // Get the instant preview.
     var instantPreview = $('.manualcrop-instantpreview', ManualCrop.croptool);
@@ -413,11 +475,15 @@ ManualCrop.updateSelection = function(image, selection) {
     if (selection && selection.width && selection.height && selection.x1 >= 0 && selection.y1 >= 0) {
       ManualCrop.output.val(selection.x1 + '|' + selection.y1 + '|' + selection.width + '|' + selection.height);
 
-      // Update the selection details.
-      $('.manualcrop-selection-x', ManualCrop.croptool).text(selection.x1);
-      $('.manualcrop-selection-y', ManualCrop.croptool).text(selection.y1);
-      $('.manualcrop-selection-width', ManualCrop.croptool).text(selection.width);
-      $('.manualcrop-selection-height', ManualCrop.croptool).text(selection.height);
+      // Update and show the selection info.
+      if (selectionInfo.length) {
+        $('.manualcrop-selection-x', ManualCrop.croptool).text(selection.x1);
+        $('.manualcrop-selection-y', ManualCrop.croptool).text(selection.y1);
+        $('.manualcrop-selection-width .manualcrop-selection-label-content', ManualCrop.croptool).text(selection.width);
+        $('.manualcrop-selection-height .manualcrop-selection-label-content', ManualCrop.croptool).text(selection.height);
+
+        selectionInfo.show();
+      }
 
       // Update the instant preview.
       if (instantPreview.length) {
@@ -436,8 +502,8 @@ ManualCrop.updateSelection = function(image, selection) {
 
         // Update the image css.
         $('img', instantPreview).css({
-          width: Math.round(scaleX * origWidth) + 'px',
-          height: Math.round(scaleY * origHeight) + 'px',
+          width: Math.round(scaleX * dimensions.width) + 'px',
+          height: Math.round(scaleY * dimensions.height) + 'px',
           marginLeft: '-' + Math.round(scaleX * selection.x1) + 'px',
           marginTop: '-' + Math.round(scaleY * selection.y1) + 'px'
         });
@@ -446,10 +512,8 @@ ManualCrop.updateSelection = function(image, selection) {
     else {
       ManualCrop.output.val('');
 
-      $('.manualcrop-selection-x', ManualCrop.croptool).text('-');
-      $('.manualcrop-selection-y', ManualCrop.croptool).text('-');
-      $('.manualcrop-selection-width', ManualCrop.croptool).text('-');
-      $('.manualcrop-selection-height', ManualCrop.croptool).text('-');
+      // Hide the selection info.
+      selectionInfo.hide();
 
       // Reset the instant preview.
       if (instantPreview.length) {
@@ -457,7 +521,7 @@ ManualCrop.updateSelection = function(image, selection) {
           .width(instantPreview.data('maxWidth'))
           .height(instantPreview.data('maxHeight'));
 
-        resized = ManualCrop.resizeDimensions(origWidth, origHeight, instantPreview.width(), instantPreview.height());
+        resized = ManualCrop.resizeDimensions(dimensions.width, dimensions.height, instantPreview.width(), instantPreview.height());
 
         $('img', instantPreview).css({
           width: resized.width + 'px',
@@ -542,12 +606,13 @@ ManualCrop.selectionStored = function(element, fid, styleName) {
           var scaleX = resized.width / selection.width;
           var scaleY = resized.height / selection.height;
 
-          // Get the original image.
+          // Get the original image and its dimensions.
           var originalImage = $('#manualcrop-overlay-' + fid + ' img.manualcrop-image, #manualcrop-inline-' + fid + ' img.manualcrop-image');
+          var dimensions = ManualCrop.getImageDimensions(originalImage);
 
           // Calculate the new width and height using the full image.
-          resized.width = Math.round(scaleX * ManualCrop.parseInt(originalImage.width()));
-          resized.height = Math.round(scaleY * ManualCrop.parseInt(originalImage.height()));
+          resized.width = Math.round(scaleX * dimensions.width);
+          resized.height = Math.round(scaleY * dimensions.height);
 
           // Create and insert the cropped preview.
           previewHolder.append(originalImage.clone().removeClass().css({
@@ -640,6 +705,32 @@ ManualCrop.parseStringSelection = function(txtSelection) {
  */
 ManualCrop.parseInt = function(integer) {
   return (parseInt(integer) || 0)
+}
+
+/**
+ * Get the dimensions of an image.
+ *
+ * @param image
+ *   jQuery image selector or object.
+ *
+ * @return
+ *   Object with a width and height property.
+ */
+ManualCrop.getImageDimensions = function(image) {
+  if (typeof image != 'jQuery') {
+    image = $(image).first();
+  }
+
+  var rawImage = $('<img />')
+    .attr('src', image.attr('src'))
+    .get(0);
+
+  var dimensions = {
+    width: ManualCrop.parseInt(rawImage.width),
+    height: ManualCrop.parseInt(rawImage.height)
+  }
+
+  return dimensions;
 }
 
 /**

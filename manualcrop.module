@@ -47,17 +47,6 @@ function manualcrop_theme() {
 }
 
 /**
- * Implements hook_permission().
- */
-function manualcrop_permission() {
-  return array(
-    'use manualcrop' => array(
-      'title' => t('Use ManualCrop')
-    ),
-  );
-}
-
-/**
  * Implements hook_image_style_delete().
  */
 function manualcrop_image_style_delete($style) {
@@ -114,7 +103,7 @@ function manualcrop_field_widget_info_alter(&$info) {
 function manualcrop_field_widget_form_alter(&$element, &$form_state, $context) {
   $widget = $context['instance']['widget'];
 
-  if (manualcrop_supported_widgets($widget['type']) && user_access('use manualcrop')) {
+  if (manualcrop_supported_widgets($widget['type'])) {
     if ($widget['type'] == 'media_generic') {
       // We don't check if Manual Crop is enabled, this happens in the file
       // enntity edit form.
@@ -141,9 +130,7 @@ function manualcrop_field_widget_form_alter(&$element, &$form_state, $context) {
  * Implements hook_field_attach_submit().
  */
 function manualcrop_field_attach_submit($entity_type, $entity, $form, &$form_state) {
-  if (user_access('use manualcrop')) {
-    manualcrop_croptool_submit($form, $form_state);
-  }
+  manualcrop_croptool_submit($form, $form_state);
 }
 
 /**

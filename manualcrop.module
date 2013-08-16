@@ -127,7 +127,10 @@ function manualcrop_field_widget_form_alter(&$element, &$form_state, $context) {
       // Default, add a process and validate callback for each child.
       foreach (element_children($element) as $key) {
         $element[$key]['#process'][] = 'manualcrop_widget_process';
-        $element[$key]['#element_validate'][] = 'manualcrop_croptool_validate';
+        // This is added in the manualcrop_widget_process().
+        // See http://jira.amazeelabs.com/browse/CD-3600  and the note from
+        // https://api.drupal.org/api/drupal/developer!topics!forms_api_reference.html/7#element_validate
+        //$element[$key]['#element_validate'][] = 'manualcrop_croptool_validate';
       }
 
       if (module_exists('insert')) {
@@ -160,6 +163,7 @@ function manualcrop_field_attach_submit($entity_type, $entity, $form, &$form_sta
  *   Altered widget element.
  */
 function manualcrop_widget_process($element, &$form_state, $form) {
+  $element['#element_validate'][] = 'manualcrop_croptool_validate';
   if (!empty($element['#file'])) {
     // Get the field instance.
     $instance = field_info_instance($element['#entity_type'], $element['#field_name'], $element['#bundle']);
